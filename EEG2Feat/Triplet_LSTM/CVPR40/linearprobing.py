@@ -33,6 +33,12 @@ from image3dplot import ImageAnnotations3D
 from sklearn import svm
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import f1_score
+import sys
+
+sys.path.append('../../..')
+from csv_logger import CSVLogger
+
+log_dir = 'EXPERIMENT_{}/logs'.format(30)
 
 
 if __name__ == '__main__':
@@ -124,10 +130,19 @@ if __name__ == '__main__':
     #     os.makedirs('EXPERIMENT_{}/val/tsne'.format(experiment_num))
     #     os.makedirs('EXPERIMENT_{}/train/tsne/'.format(experiment_num))
     #     os.system('cp *.py EXPERIMENT_{}'.format(experiment_num))
-    experiment_num = 29
+    experiment_num = 30 # previously 29
 
-    ckpt_lst = natsorted(glob('EXPERIMENT_{}/bestckpt/eegfeat_all_0.9665178571428571.pth'.format(experiment_num)))
+    ckpt_lst = natsorted(glob('EXPERIMENT_{}/bestckpt/eegfeat_all_0.9665178571428571.pth'.format(29)))
 
+    # Initialize CSV logger
+    logger = CSVLogger(
+        log_dir=log_dir,
+        filename='linearprobing_results.csv',
+        fieldnames=['experiment', 'epoch', 'kmeans_acc', 
+                    'linear_svm_acc', 'linear_svm_f1',
+                    'poly_svm_acc', 'poly_svm_f1',
+                    'rbf_svm_acc', 'rbf_svm_f1']
+    )
     START_EPOCH = 0
 
     if len(ckpt_lst)>=1:
@@ -196,3 +211,19 @@ if __name__ == '__main__':
     rbf_f1 = f1_score(Y_test, rbf_pred, average='weighted')
     print('Accuracy (RBF Kernel): ', "%.2f" % (rbf_accuracy*100))
     print('F1 (RBF Kernel): ', "%.2f" % (rbf_f1*100))
+
+    # Log results
+    logger.log({
+        'experiment': experiment_num,
+        'epoch': START_EPOCH,
+        'kmeans_acc': clustering_acc_proj,
+        'linear_svm_acc': poly_lin_accuracy,
+        'linear_svm_f1': poly_lin_f1,
+        'poly_svm_acc': poly_accuracy,
+        'poly_svm_f1': poly_f1,
+        'rbf_svm_acc': rbf_accuracy,
+        'rbf_svm_f1': rbf_f1
+    })
+
+    # Close the logger
+    logger.close()

@@ -3,6 +3,9 @@ import os
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 import config
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
+from csv_logger import CSVLogger
 from tqdm import tqdm
 import numpy as np
 import pdb
@@ -89,8 +92,9 @@ def train(epoch, model, optimizer, loss_fn, miner, train_data, train_dataloader,
 
         # tsne_plot = TsnePlot(perplexity=30, learning_rate=700, n_iter=1000)
         # tsne_plot.plot(eeg_featvec_proj, labels_array, clustering_acc_proj, 'train', experiment_num, epoch, proj_type='proj')
+        return running_loss, pred_acc
 
-    return running_loss
+    return running_loss, None
  
 
 def validation(epoch, model, optimizer, loss_fn, miner, train_data, val_dataloader, experiment_num):
@@ -297,13 +301,22 @@ if __name__ == '__main__':
     best_val_acc   = 0.0
     best_val_epoch = 0
 
+    # Initialize CSV logger
+    csv_logger = CSVLogger(
+        log_dir='EXPERIMENT_{}/logs'.format(experiment_num),
+        filename='finetuning_log.csv',
+        fieldnames=['epoch', 'train_loss', 'train_acc', 'val_loss', 'val_acc', 'best_val_acc', 'best_val_epoch']
+    )
+
     for epoch in range(START_EPOCH, EPOCHS):
 
-        running_train_loss = train(epoch, model, optimizer, loss_fn, miner, train_data, train_dataloader, experiment_num)
+        running_train_loss, train_acc = train(epoch, model, optimizer, loss_fn, miner, train_data, train_dataloader, experiment_num)
+        val_acc = None
+        running_val_loss = None
         if (epoch%config.vis_freq) == 0:
         	running_val_loss, val_acc   = validation(epoch, model, optimizer, loss_fn, miner, train_data, val_dataloader, experiment_num)
 
-        if best_val_acc < val_acc:
+        if val_acc is not None and best_val_acc < val_acc:
         	best_val_acc   = val_acc
         	best_val_epoch = epoch
         	torch.save({
@@ -312,3 +325,24 @@ if __name__ == '__main__':
                 'optimizer_state_dict': optimizer.state_dict(),
                 # 'scheduler_state_dict': scheduler.state_dict(),
               }, 'EXPERIMENT_{}/finetune_bestckpt/eegfeat_{}_{}.pth'.format(experiment_num, 'all', val_acc))
+
+        # Log metrics to CSV
+        csv_logger.log({
+            'epoch': epoch,
+            'train_loss': np.mean(running_train_loss),
+            'train_acc': train_acc if train_acc is not None else '',
+            'val_loss': np.mean(running_val_loss) if running_val_loss is not None else '',
+            'val_acc': val_acc if val_acc is not None else '',
+            'best_val_acc': best_val_acc,
+            'best_val_epoch': best_val_epoch
+        })
+
+        torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                # 'scheduler_state_dict': scheduler.state_dict(),
+              }, 'EXPERIMENT_{}/finetune_ckpt/eegfeat_{}.pth'.format(experiment_num, 'all'))
+
+    # Close CSV logger
+    csv_logger.close()

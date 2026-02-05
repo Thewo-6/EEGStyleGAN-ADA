@@ -4,10 +4,15 @@ from tqdm import tqdm
 import numpy as np
 import pdb
 import os
+import sys
 from natsort import natsorted
 import cv2
 from glob import glob
 import pandas as pd
+
+# Add parent directory to path for csv_logger import
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+from csv_logger import CSVLogger
 
 import torch
 import torch.nn as nn
@@ -37,7 +42,7 @@ def cross_entropy(preds, targets, reduction='none'):
     elif reduction == "mean":
         return loss.mean()
 
-def train(preprocess, model, temperature, optimizer, scheduler, START_EPOCH, num_epochs, experiment_num):
+def train(preprocess, model, temperature, optimizer, scheduler, START_EPOCH, num_epochs, experiment_num, csv_logger):
     
     for epoch in range(START_EPOCH, num_epochs):
         running_loss = 0.0
@@ -77,13 +82,26 @@ def train(preprocess, model, temperature, optimizer, scheduler, START_EPOCH, num
 
             tq.set_description('[%d, %5d] loss: %.3f' %
                     (epoch + 1, batch_idx + 1, running_loss / (batch_idx+1.0)))
-                
+        
+        # Calculate average epoch loss
+        avg_epoch_loss = running_loss / len(data_loader)
+        
+        # Log to CSV
+        log_entry = {
+            'epoch': epoch,
+            'train_loss': avg_epoch_loss,
+            'checkpoint_saved': ''
+        }
+        
         if epoch == 32 or epoch == 64 or epoch == 128 or epoch == 256 or epoch == 512 or epoch == 1024 or epoch == 1536 or epoch == 2048 or epoch == 2560 or epoch == 3072 or epoch == 3584 or epoch == 4096:
             torch.save({
                     'epoch': epoch,
                     'model_state_dict': model.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
-            }, 'EEGClip_ckpt/EXPERIMENT_{}/checkpoints/clip_{}.pth'.format(experiment_num, epoch)) 
+            }, 'EEGClip_ckpt/EXPERIMENT_{}/checkpoints/clip_{}.pth'.format(experiment_num, epoch))
+            log_entry['checkpoint_saved'] = 'Yes'
+        
+        csv_logger.log(log_entry) 
 
         
 #load the data
@@ -207,6 +225,16 @@ if len(ckpt_lst)>=1:
 else:
     os.makedirs('EEGClip_ckpt/EXPERIMENT_{}/checkpoints/'.format(experiment_num))
 
-train(preprocess, model, 0.5, optimizer, scheduler, START_EPOCH, epoch, experiment_num)
+# Initialize CSV logger
+csv_logger = CSVLogger(
+    log_dir='EEGClip_ckpt/EXPERIMENT_{}/logs'.format(experiment_num),
+    filename='training_log.csv',
+    fieldnames=['epoch', 'train_loss', 'checkpoint_saved']
+)
+
+train(preprocess, model, 0.5, optimizer, scheduler, START_EPOCH, epoch, experiment_num, csv_logger)
+
+# Close CSV logger
+csv_logger.close()
 
 print('completed')

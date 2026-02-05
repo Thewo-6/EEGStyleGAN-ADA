@@ -3,6 +3,10 @@ import os
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
+from csv_logger import CSVLogger
+
 import config
 from tqdm import tqdm
 import numpy as np
@@ -92,7 +96,9 @@ def train(epoch, model, optimizer, loss_fn, miner, train_data, train_dataloader,
         # tsne_plot = TsnePlot(perplexity=30, learning_rate=700, n_iter=1000)
         # tsne_plot.plot(eeg_featvec_proj, labels_array, clustering_acc_proj, 'train', experiment_num, epoch, proj_type='proj')
 
-    return running_loss
+        return running_loss, clustering_acc_proj
+    
+    return running_loss, None
  
 
 def validation(epoch, model, optimizer, loss_fn, miner, train_data, val_dataloader, experiment_num):
@@ -271,6 +277,15 @@ if __name__ == '__main__':
         os.makedirs('EXPERIMENT_{}/checkpoints/'.format(experiment_num))
         os.makedirs('EXPERIMENT_{}/bestckpt/'.format(experiment_num))
 
+    # Initialize CSV Logger
+    if not os.path.isdir('EXPERIMENT_{}/logs'.format(experiment_num)):
+        os.makedirs('EXPERIMENT_{}/logs'.format(experiment_num))
+    csv_logger = CSVLogger(
+        log_dir='EXPERIMENT_{}/logs'.format(experiment_num),
+        filename='training_log.csv',
+        fieldnames=['epoch', 'train_loss', 'train_kmeans_acc', 'val_loss', 'val_kmeans_acc', 'best_val_acc', 'best_val_epoch']
+    )
+
     miner   = miners.MultiSimilarityMiner()
     loss_fn = losses.TripletMarginLoss()
     # loss_fn = ContrastiveLoss(batch_size=config.batch_size, temperature=config.temperature)
@@ -287,11 +302,13 @@ if __name__ == '__main__':
 
     for epoch in range(START_EPOCH, EPOCHS):
 
-        running_train_loss = train(epoch, model, optimizer, loss_fn, miner, train_data, train_dataloader, experiment_num)
+        running_train_loss, train_kmeans_acc = train(epoch, model, optimizer, loss_fn, miner, train_data, train_dataloader, experiment_num)
+        val_acc = None
+        running_val_loss = None
         if (epoch%config.vis_freq) == 0:
         	running_val_loss, val_acc   = validation(epoch, model, optimizer, loss_fn, miner, train_data, val_dataloader, experiment_num)
 
-        if best_val_acc < val_acc:
+        if val_acc is not None and best_val_acc < val_acc:
         	best_val_acc   = val_acc
         	best_val_epoch = epoch
         	torch.save({
@@ -301,6 +318,16 @@ if __name__ == '__main__':
                 # 'scheduler_state_dict': scheduler.state_dict(),
               }, 'EXPERIMENT_{}/bestckpt/eegfeat_{}_{}.pth'.format(experiment_num, 'all', val_acc))
 
+        # Log metrics to CSV
+        csv_logger.log({
+            'epoch': epoch,
+            'train_loss': np.mean(running_train_loss),
+            'train_kmeans_acc': train_kmeans_acc if train_kmeans_acc is not None else '',
+            'val_loss': np.mean(running_val_loss) if running_val_loss is not None else '',
+            'val_kmeans_acc': val_acc if val_acc is not None else '',
+            'best_val_acc': best_val_acc,
+            'best_val_epoch': best_val_epoch
+        })
 
         torch.save({
                 'epoch': epoch,
@@ -308,6 +335,8 @@ if __name__ == '__main__':
                 'optimizer_state_dict': optimizer.state_dict(),
                 # 'scheduler_state_dict': scheduler.state_dict(),
               }, 'EXPERIMENT_{}/checkpoints/eegfeat_{}.pth'.format(experiment_num, 'all'))
+    
+    csv_logger.close()
 
         # running_val_loss   = validation(epoch, model, optimizer, loss_fn, train_data, val_dataloader)
         # print(np.mean(running_train_loss), eeg_featvec.shape, labels_array.shape)

@@ -7,6 +7,7 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
 import os
+import sys
 import time
 import copy
 import json
@@ -23,6 +24,10 @@ from torch_utils.ops import grid_sample_gradfix
 
 import legacy
 from metrics import metric_main
+
+# Add parent directory to path for csv_logger import
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from csv_logger import CSVLogger
 
 #----------------------------------------------------------------------------
 
@@ -242,8 +247,17 @@ def training_loop(
     stats_metrics = dict()
     stats_jsonl = None
     stats_tfevents = None
+    csv_logger = None
     if rank == 0:
         stats_jsonl = open(os.path.join(run_dir, 'stats.jsonl'), 'wt')
+        # Initialize CSV logger
+        csv_logger = CSVLogger(
+            log_dir=os.path.join(run_dir, 'logs'),
+            filename='training_log.csv',
+            fieldnames=['tick', 'kimg', 'total_sec', 'sec_per_tick', 'sec_per_kimg', 
+                       'maintenance_sec', 'cpu_mem_gb', 'peak_gpu_mem_gb', 'augment_p', 
+                       'Loss_G', 'Loss_D', 'Loss_signs_real']
+        )
         try:
             import torch.utils.tensorboard as tensorboard
             stats_tfevents = tensorboard.SummaryWriter(run_dir)
@@ -411,6 +425,25 @@ def training_loop(
             for name, value in stats_metrics.items():
                 stats_tfevents.add_scalar(f'Metrics/{name}', value, global_step=global_step, walltime=walltime)
             stats_tfevents.flush()
+        
+        # Log to CSV
+        if csv_logger is not None:
+            csv_log_entry = {
+                'tick': cur_tick,
+                'kimg': cur_nimg / 1e3,
+                'total_sec': tick_end_time - start_time,
+                'sec_per_tick': tick_end_time - tick_start_time,
+                'sec_per_kimg': (tick_end_time - tick_start_time) / (cur_nimg - tick_start_nimg) * 1e3,
+                'maintenance_sec': maintenance_time,
+                'cpu_mem_gb': psutil.Process(os.getpid()).memory_info().rss / 2**30,
+                'peak_gpu_mem_gb': torch.cuda.max_memory_allocated(device) / 2**30,
+                'augment_p': float(augment_pipe.p.cpu()) if augment_pipe is not None else 0,
+                'Loss_G': stats_dict.get('Loss/G/loss', dnnlib.EasyDict(mean=0)).mean,
+                'Loss_D': stats_dict.get('Loss/D/loss', dnnlib.EasyDict(mean=0)).mean,
+                'Loss_signs_real': stats_dict.get('Loss/signs/real', dnnlib.EasyDict(mean=0)).mean
+            }
+            csv_logger.log(csv_log_entry)
+        
         if progress_fn is not None:
             progress_fn(cur_nimg // 1000, total_kimg)
 
@@ -426,5 +459,8 @@ def training_loop(
     if rank == 0:
         print()
         print('Exiting...')
+        # Close CSV logger
+        if csv_logger is not None:
+            csv_logger.close()
 
 #----------------------------------------------------------------------------

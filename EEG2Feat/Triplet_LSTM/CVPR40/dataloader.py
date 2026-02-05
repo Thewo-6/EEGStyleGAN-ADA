@@ -59,8 +59,9 @@ class EEGDataset(Dataset):
     def __getitem__(self, index):
         eeg    = self.eegs[index]
         # eeg    = np.float32(self.eegs[index].cpu())
-        norm   = torch.max(eeg) / 2.0
-        eeg    = (eeg - norm)/ norm
+        #norm   = torch.max(eeg) / 2.0
+        #eeg    = (eeg - norm)/ norm
+        eeg = (eeg - eeg.mean()) / eeg.std(unbiased=False).clamp_min(1e-6)
         # eeg    = (eeg - np.min(eeg))/ (np.max(eeg) - np.min(eeg))
         image  = self.images[index]
         label  = self.labels[index]

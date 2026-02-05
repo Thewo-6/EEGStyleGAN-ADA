@@ -11,10 +11,10 @@ warnings.warn = warn
 
 
 
-base_path       = '/path to data folder/'
-train_path      = 'data/eeg_imagenet40_cvpr_2017_raw/train/'
-validation_path = 'data/eeg_imagenet40_cvpr_2017_raw/val/'
-test_path       = 'data/eeg_imagenet40_cvpr_2017_raw/test/'
+base_path       = r"D:\DATASETS\EEGCVPR40"
+train_path      = r'\data\eeg_imagenet40_cvpr_2017_raw\train\\'
+validation_path = r'\data\eeg_imagenet40_cvpr_2017_raw\val\\'
+test_path       = r'\data\eeg_imagenet40_cvpr_2017_raw\test\\'
 device          = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 vis_freq        = 1
@@ -27,7 +27,7 @@ input_size     = 128 # Number of EEG channels
 timestep       = 440
 # hidden_size    = embedding_dim//2
 num_layers     = 4
-batch_size     = 256 #48
+batch_size     = 48 #48 / previously 256
 temperature    = 0.5
 epoch          = 8192
 lr             = 3e-4

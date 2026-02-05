@@ -1,8 +1,13 @@
 ## Take input of EEG and save it as a numpy array
 import os
+import sys
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
+# Add parent directory to path for csv_logger import
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
+from csv_logger import CSVLogger
 
 import config
 from tqdm import tqdm
@@ -91,57 +96,44 @@ def train(epoch, model, optimizer, loss_fn, miner, train_data, train_dataloader,
         # tsne_plot = TsnePlot(perplexity=30, learning_rate=700, n_iter=1000)
         # tsne_plot.plot(eeg_featvec_proj, labels_array, clustering_acc_proj, 'train', experiment_num, epoch, proj_type='proj')
 
-    return running_loss
+    return running_loss, clustering_acc_proj if (epoch%config.vis_freq) == 0 else None
  
 
 def validation(epoch, model, optimizer, loss_fn, miner, train_data, val_dataloader, experiment_num):
 
-	running_loss      = []
-	eeg_featvec       = np.array([])
-	eeg_featvec_proj  = np.array([])
-	eeg_gamma         = np.array([])
-	labels_array      = np.array([])
+    running_loss      = []
+    eeg_featvec       = np.array([])
+    eeg_featvec_proj  = np.array([])
+    eeg_gamma         = np.array([])
+    labels_array      = np.array([])
 
-	tq = tqdm(val_dataloader)
-	for batch_idx, (eeg, images, labels) in enumerate(tq, start=1):
-		eeg, labels = eeg.to(config.device), labels.to(config.device)
-		with torch.no_grad():
-			x_proj = model(eeg)
+    tq = tqdm(val_dataloader)
+    for batch_idx, (eeg, images, labels) in enumerate(tq, start=1):
+        eeg, labels = eeg.to(config.device), labels.to(config.device)
+        with torch.no_grad():
+            x_proj = model(eeg)
+            hard_pairs = miner(x_proj, labels)
+            loss = loss_fn(x_proj, labels, hard_pairs)
+            running_loss.append(loss.detach().cpu().numpy())
 
-			hard_pairs = miner(x_proj, labels)
-			loss       = loss_fn(x_proj, labels, hard_pairs)
+        tq.set_description('Val:[{}, {:0.3f}]'.format(epoch, np.mean(running_loss)))
 
-			running_loss = running_loss + [loss.detach().cpu().numpy()]
+        eeg_featvec_proj = (
+            np.concatenate((eeg_featvec_proj, x_proj.cpu().numpy()), axis=0)
+            if eeg_featvec_proj.size else x_proj.cpu().numpy()
+        )
+        labels_array = (
+            np.concatenate((labels_array, labels.cpu().numpy()), axis=0)
+            if labels_array.size else labels.cpu().numpy()
+        )
 
-		tq.set_description('Val:[{}, {:0.3f}]'.format(epoch, np.mean(running_loss)))
+    num_clusters = 40
+    k_means = K_means(n_clusters=num_clusters)
+    clustering_acc_proj = k_means.transform(eeg_featvec_proj, labels_array)
+    print("[Epoch: {}, Val KMeans score Proj: {}]".format(epoch, clustering_acc_proj))
 
-		# eeg_featvec      = np.concatenate((eeg_featvec, x.cpu().detach().numpy()), axis=0) if eeg_featvec.size else x.cpu().detach().numpy()
-		eeg_featvec_proj = np.concatenate((eeg_featvec_proj, x_proj.cpu().detach().numpy()), axis=0) if eeg_featvec_proj.size else x_proj.cpu().detach().numpy()
-		# eeg_gamma        = np.concatenate((eeg_gamma, gamma.cpu().detach().numpy()), axis=0) if eeg_gamma.size else gamma.cpu().detach().numpy()
-		labels_array     = np.concatenate((labels_array, labels.cpu().detach().numpy()), axis=0) if labels_array.size else labels.cpu().detach().numpy()
+    return running_loss, clustering_acc_proj
 
-	### compute k-means score and Umap score on the text and image embeddings
-	num_clusters   = 40
-	# k_means        = K_means(n_clusters=num_clusters)
-	# clustering_acc_feat = k_means.transform(eeg_featvec, labels_array)
-	# print("[Epoch: {}, Val KMeans score Feat: {}]".format(epoch, clustering_acc_feat))
-
-	k_means        = K_means(n_clusters=num_clusters)
-	clustering_acc_proj = k_means.transform(eeg_featvec_proj, labels_array)
-	print("[Epoch: {}, Val KMeans score Proj: {}]".format(epoch, clustering_acc_proj))
-
-	# k_means        = K_means(n_clusters=num_clusters)
-	# clustering_acc_gamma = k_means.transform(eeg_gamma, labels_array)
-	# print("[Epoch: {}, KMeans score gamma: {}]".format(epoch, clustering_acc_proj))
-
-	# tsne_plot = TsnePlot(perplexity=30, learning_rate=700, n_iter=1000)
-	# tsne_plot.plot(eeg_featvec, labels_array, clustering_acc_feat, 'val', experiment_num, epoch, proj_type='feat')
-
-
-	# tsne_plot = TsnePlot(perplexity=30, learning_rate=700, n_iter=1000)
-	# tsne_plot.plot(eeg_featvec_proj, labels_array, clustering_acc_proj, 'val', experiment_num, epoch, proj_type='proj')
-
-	return running_loss, clustering_acc_proj
 
     
 if __name__ == '__main__':
@@ -187,8 +179,32 @@ if __name__ == '__main__':
     x_train_image = torch.from_numpy(x_train_image).float().to(device)
     train_labels  = torch.from_numpy(train_labels).long().to(device)
 
-    train_data       = EEGDataset(x_train_eeg, x_train_image, train_labels)
-    train_dataloader = DataLoader(train_data, batch_size=batch_size, shuffle=True, pin_memory=False, drop_last=True)
+    train_data = EEGDataset(x_train_eeg, x_train_image, train_labels)
+    train_dataloader = DataLoader(
+        train_data,
+        batch_size=batch_size,
+        shuffle=True,
+        pin_memory=False,
+        drop_last=True
+    )
+
+# ---- Alternative CPU-based DataLoader (disabled) ----
+# x_train_eeg   = torch.from_numpy(x_train_eeg).float()
+# x_train_image = torch.from_numpy(x_train_image).float()
+# train_labels  = torch.from_numpy(train_labels).long()
+#
+# train_data = EEGDataset(x_train_eeg, x_train_image, train_labels)
+#
+# train_dataloader = DataLoader(
+#     train_data,
+#     batch_size=batch_size,
+#     shuffle=True,
+#     num_workers=config.num_workers if hasattr(config, "num_workers") else 4,
+#     pin_memory=True,
+#     drop_last=True,
+#     persistent_workers=True if (hasattr(config, "num_workers") and config.num_workers > 0) else False,
+# )
+
 
 
     ## Validation data
@@ -209,22 +225,42 @@ if __name__ == '__main__':
         # label_Val.append(class_labels[loaded_array[3]])
         label_Val.append(loaded_array[2])
         
-    x_val_eeg   = np.array(x_val_eeg)
+    x_val_eeg = np.array(x_val_eeg)
     x_val_image = np.array(x_val_image)
-    val_labels  = np.array(label_Val)
-
-    x_val_eeg   = torch.from_numpy(x_val_eeg).float().to(device)
+    val_labels = np.array(label_Val)
+ 
+    x_val_eeg = torch.from_numpy(x_val_eeg).float().to(device)
     x_val_image = torch.from_numpy(x_val_image).float().to(device)
-    val_labels  = torch.from_numpy(val_labels).long().to(device)
+    val_labels = torch.from_numpy(val_labels).long().to(device)
 
-    val_data       = EEGDataset(x_val_eeg, x_val_image, val_labels)
-    val_dataloader = DataLoader(val_data, batch_size=batch_size, shuffle=False, pin_memory=False, drop_last=True)
+    val_data = EEGDataset(x_val_eeg, x_val_image, val_labels)
+    val_dataloader = DataLoader(
+        val_data,
+        batch_size=batch_size,
+        shuffle=False,
+        pin_memory=False,
+        drop_last=True
+    )
 
-    # model     = CNNEEGFeatureExtractor(input_shape=[1, config.input_size, config.timestep],\
-    #                                    feat_dim=config.feat_dim,\
-    #                                    projection_dim=config.projection_dim).to(config.device)
-    model     = EEGFeatNet(n_features=config.feat_dim, projection_dim=config.projection_dim, num_layers=config.num_layers).to(config.device)
-    model     = torch.nn.DataParallel(model).to(config.device)
+# ---- Alternative CPU-based Validation Loader (disabled) ----
+# x_val_eeg   = torch.from_numpy(x_val_eeg).float()
+# x_val_image = torch.from_numpy(x_val_image).float()
+# val_labels  = torch.from_numpy(val_labels).long()
+#
+# val_data = EEGDataset(x_val_eeg, x_val_image, val_labels)
+#
+# val_dataloader = DataLoader(
+#     val_data,
+#     batch_size=batch_size,
+#     shuffle=False,
+#     num_workers=config.num_workers if hasattr(config, "num_workers") else 4,
+#     pin_memory=True,
+#     drop_last=True,
+#     persistent_workers=True if (hasattr(config, "num_workers") and config.num_workers > 0) else False,
+# )
+
+    model = EEGFeatNet(n_features=config.feat_dim, projection_dim=config.projection_dim, num_layers=config.num_layers).to(config.device)
+    model = torch.nn.DataParallel(model).to(config.device)
     optimizer = torch.optim.Adam(\
                                     list(model.parameters()),\
                                     lr=config.lr,\
@@ -232,7 +268,7 @@ if __name__ == '__main__':
                                 )
 
     
-    dir_info  = natsorted(glob('EXPERIMENT_*'))
+    dir_info = natsorted(glob('EXPERIMENT_*'))
     if len(dir_info)==0:
         experiment_num = 1
     else:
@@ -247,6 +283,7 @@ if __name__ == '__main__':
         os.makedirs('EXPERIMENT_{}/finetune_ckpt/'.format(experiment_num))
         os.makedirs('EXPERIMENT_{}/finetune_bestckpt/'.format(experiment_num))
         os.system('cp *.py EXPERIMENT_{}'.format(experiment_num))
+        os.makedirs('EXPERIMENT_{}/logs/'.format(experiment_num))
 
     ckpt_lst = natsorted(glob('EXPERIMENT_{}/checkpoints/eegfeat_*.pth'.format(experiment_num)))
 
@@ -279,22 +316,48 @@ if __name__ == '__main__':
     best_val_acc   = 0.0
     best_val_epoch = 0
 
+    # Initialize CSV logger
+    csv_logger = CSVLogger(
+        log_dir='EXPERIMENT_{}/logs'.format(experiment_num),
+        filename='training_log.csv',
+        fieldnames=['epoch', 'train_loss', 'train_kmeans_acc', 'val_loss', 'val_kmeans_acc', 'best_val_acc', 'best_val_epoch']
+    )
+
     for epoch in range(START_EPOCH, EPOCHS):
 
-        running_train_loss = train(epoch, model, optimizer, loss_fn, miner, train_data, train_dataloader, experiment_num)
+        running_train_loss, train_acc = train(epoch, model, optimizer, loss_fn, miner, train_data, train_dataloader, experiment_num)
+        
+        # Prepare log entry
+        log_entry = {
+            'epoch': epoch,
+            'train_loss': np.mean(running_train_loss),
+            'train_kmeans_acc': train_acc if train_acc is not None else '',
+            'val_loss': '',
+            'val_kmeans_acc': '',
+            'best_val_acc': best_val_acc,
+            'best_val_epoch': best_val_epoch
+        }
+        
         if (epoch%config.vis_freq) == 0:
-        	running_val_loss, val_acc   = validation(epoch, model, optimizer, loss_fn, miner, train_data, val_dataloader, experiment_num)
+            running_val_loss, val_acc   = validation(epoch, model, optimizer, loss_fn, miner, train_data, val_dataloader, experiment_num)
+            
+            log_entry['val_loss'] = np.mean(running_val_loss)
+            log_entry['val_kmeans_acc'] = val_acc
 
-        if best_val_acc < val_acc:
-        	best_val_acc   = val_acc
-        	best_val_epoch = epoch
-        	torch.save({
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                # 'scheduler_state_dict': scheduler.state_dict(),
-              }, 'EXPERIMENT_{}/bestckpt/eegfeat_{}_{}.pth'.format(experiment_num, 'all', val_acc))
-
+            if best_val_acc < val_acc:
+                best_val_acc   = val_acc
+                best_val_epoch = epoch
+                log_entry['best_val_acc'] = best_val_acc
+                log_entry['best_val_epoch'] = best_val_epoch
+                torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    # 'scheduler_state_dict': scheduler.state_dict(),
+                  }, 'EXPERIMENT_{}/bestckpt/eegfeat_{}_{}.pth'.format(experiment_num, 'all', val_acc))
+        
+        # Log to CSV
+        csv_logger.log(log_entry)
 
         torch.save({
                 'epoch': epoch,
@@ -302,23 +365,6 @@ if __name__ == '__main__':
                 'optimizer_state_dict': optimizer.state_dict(),
                 # 'scheduler_state_dict': scheduler.state_dict(),
               }, 'EXPERIMENT_{}/checkpoints/eegfeat_{}.pth'.format(experiment_num, 'all'))
-
-        # running_val_loss   = validation(epoch, model, optimizer, loss_fn, train_data, val_dataloader)
-        # print(np.mean(running_train_loss), eeg_featvec.shape, labels_array.shape)
-
-        # if (epoch%1) == 0:
-        #     ### compute k-means score and Umap score on the text and image embeddings
-        #     num_clusters = 40
-        #     k_means        = K_means(n_clusters=num_clusters)
-        #     clustering_acc = k_means.transform(eeg_featvec, labels_array)
-        #     print("KMeans score:", clustering_acc)
-
-        #     with torch.no_grad():
-        #         pred = model(base_spectrograms)[0]
-        #         gt   = base_spectrograms[0]
-
-        #     save_image(pred, gt, experiment_num, epoch, 'val')
-        # break
-        # validate(model, 0.1, train_data)
-
-        # print('completed')
+    
+    # Close CSV logger
+    csv_logger.close()

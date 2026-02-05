@@ -1,0 +1,39 @@
+# PyTorch and Deep Learning Framework
+torch==1.7.0+cu110
+torchvision==0.8.1+cu110
+torchaudio==0.7.0
+
+# Computer Vision
+opencv-python==4.5.4.58
+opencv-contrib-python==4.5.4.58
+Pillow>=8.0.0
+
+# Scientific Computing
+numpy>=1.19.0
+scipy>=1.5.0
+
+# Metric Learning and Loss Functions
+pytorch-metric-learning>=0.9.0
+lpips>=0.1.4
+
+# Data Processing and Utilities
+natsort>=7.1.0
+tqdm>=4.62.0
+
+# Visualization
+matplotlib>=3.3.0
+umap-learn>=0.5.0
+scikit-learn>=0.24.0
+seaborn>=0.11.0
+
+# Command Line Interface
+click>=7.1.0
+
+# System Utilities
+psutil>=5.8.0
+
+# Additional utilities for CNN experiments
+torchsummary>=1.5.0
+
+# Note: Install PyTorch first with CUDA support using:
+# pip install torch==1.7.0+cu110 torchvision==0.8.1+cu110 torchaudio==0.7.0 -f https://download.pytorch.org/whl/torch_stable.html
