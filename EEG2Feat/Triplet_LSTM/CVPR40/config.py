@@ -11,7 +11,11 @@ warnings.warn = warn
 
 
 
-base_path       = r"D:\DATASETS\EEGCVPR40"
+""" base_path       = r'/workspace/'
+    train_path      = r'/eeg_imagenet40_cvpr_2017_raw/train/'
+    validation_path = r'/eeg_imagenet40_cvpr_2017_raw/val/'
+    test_path       = r'/eeg_imagenet40_cvpr_2017_raw/test/' """
+base_path       = r'D:\DATASETS\EEGCVPR40\\'
 train_path      = r'\data\eeg_imagenet40_cvpr_2017_raw\train\\'
 validation_path = r'\data\eeg_imagenet40_cvpr_2017_raw\val\\'
 test_path       = r'\data\eeg_imagenet40_cvpr_2017_raw\test\\'

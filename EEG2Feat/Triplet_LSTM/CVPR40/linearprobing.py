@@ -132,7 +132,7 @@ if __name__ == '__main__':
     #     os.system('cp *.py EXPERIMENT_{}'.format(experiment_num))
     experiment_num = 30 # previously 29
 
-    ckpt_lst = natsorted(glob('EXPERIMENT_{}/bestckpt/eegfeat_all_0.9665178571428571.pth'.format(29)))
+    ckpt_lst = natsorted(glob('EXPERIMENT_{}/bestckpt/eegfeat_all_0.9631696428571429.pth'.format(30)))
 
     # Initialize CSV logger
     logger = CSVLogger(

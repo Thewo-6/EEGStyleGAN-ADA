@@ -1,0 +1,58 @@
+# ============================================================================
+# EEGStyleGAN-ADA Requirements for NVIDIA RTX 5090 (Blackwell)
+# Updated for CUDA 12.8+ and PyTorch 2.7+ (Stable)
+# Python 3.10 to 3.12 recommended
+# ============================================================================
+
+# PyTorch and Deep Learning Framework (CUDA 12.8 / 13.0+)
+# ============================================================================
+# Use the latest stable build specifically compiled for CUDA 12.8+ 
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+# ============================================================================
+
+# Computer Vision
+opencv-python>=4.10.0
+opencv-contrib-python>=4.10.0
+Pillow>=10.3.0
+scikit-image>=0.22.0
+
+# Scientific Computing
+numpy>=1.26.0      # Updated for better Python 3.12 compatibility
+scipy>=1.13.0
+pandas>=2.2.0
+
+# Metric Learning and Loss Functions
+pytorch-metric-learning>=2.5.0
+lpips>=0.1.4
+
+# Data Processing and Utilities
+natsort>=8.4.0
+tqdm>=4.66.0
+
+# Visualization
+matplotlib>=3.8.0
+umap-learn>=0.5.6
+scikit-learn>=1.4.0
+seaborn>=0.13.0
+
+# Command Line Interface
+click>=8.1.7
+
+# System Utilities
+psutil>=5.9.8
+
+# Network Architecture Utilities
+torchsummary>=1.5.1
+
+# Performance Optimizations for Blackwell
+ninja>=1.11.1       # Essential for fast JIT compilation of CUDA kernels
+bitsandbytes>=0.43.0 # Highly recommended for 4-bit/8-bit optimizations on 5090
+
+# UMAP and Visualization Suite
+umap-learn[plot]>=0.5.6  # Installs core + plotting hooks
+datashader>=0.16.0       
+bokeh>=3.4.0             
+holoviews>=1.18.0        
+colorcet>=3.1.0          
+matplotlib>=3.8.0
+seaborn>=0.13.0
