@@ -1,0 +1,21 @@
+# Required packages for CVPR40_Refactored training
+
+# Core PyTorch
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Metric Learning
+pytorch-metric-learning>=1.7.0
+
+# Data processing and visualization
+numpy>=1.21.0
+scipy>=1.7.0
+opencv-python>=4.5.0
+scikit-learn>=1.0.0
+
+# Utilities
+tqdm>=4.62.0
+natsort>=8.0.0
+
+# Optional: for GPU support (uncomment as needed)
+# pytorch-cuda-toolkit>=11.8
